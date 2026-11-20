@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"net/url"
 	"path"
 	"strings"
@@ -26,6 +28,11 @@ func (e *storageEntry) URLPath() string {
 func (e *storageEntry) Name() string {
 	_, file := path.Split(e.path)
 	return file
+}
+
+// Path returns the public path of the entry.
+func (e *storageEntry) Path() string {
+	return e.path
 }
 
 func (e *storageEntry) String() string {
@@ -181,6 +188,83 @@ func (store *S3Storage) List(ctx context.Context, p string) ([]*StorageDirectory
 	}
 
 	return dirs, files, nil
+}
+
+// ObjectMeta describes an object discovered by Walk. Path is the public
+// (base-prefix stripped) path, matching StorageFile.path.
+type ObjectMeta struct {
+	Path         string
+	Size         int64
+	ETag         string
+	LastModified time.Time
+}
+
+// Walk visits every object under p recursively in lexical key order, following
+// ListObjectsV2 pagination. Only audio files are returned; passing a nil
+// keep filter keeps all objects. The callback is invoked in listing order, so a
+// caller can stop early by returning a non-nil error.
+func (store *S3Storage) Walk(ctx context.Context, p string, keep func(*ObjectMeta) bool, fn func(*ObjectMeta) error) error {
+	input := &s3.ListObjectsV2Input{
+		Bucket: aws.String(store.cfg.Bucket),
+	}
+	prefix := store.prefix(p)
+	if prefix != "" {
+		input.Prefix = aws.String(prefix + Delimiter)
+	}
+
+	paginator := s3.NewListObjectsV2Paginator(store.s3, input)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return err
+		}
+		for _, object := range page.Contents {
+			// Ignore empty objects used to emulate empty directories.
+			if aws.ToInt64(object.Size) == 0 {
+				continue
+			}
+			meta := &ObjectMeta{
+				Path: store.path(aws.ToString(object.Key)),
+				Size: aws.ToInt64(object.Size),
+			}
+			if object.ETag != nil {
+				meta.ETag = strings.Trim(*object.ETag, `"`)
+			}
+			if object.LastModified != nil {
+				meta.LastModified = *object.LastModified
+			}
+			if keep != nil && !keep(meta) {
+				continue
+			}
+			if err := fn(meta); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// ReadRange reads up to length bytes starting at offset. S3 may return fewer
+// bytes than requested; callers must handle short reads.
+func (store *S3Storage) ReadRange(ctx context.Context, p string, offset, length int64) ([]byte, error) {
+	if offset < 0 || length <= 0 {
+		return nil, fmt.Errorf("invalid range offset=%d length=%d", offset, length)
+	}
+	input := &s3.GetObjectInput{
+		Bucket: aws.String(store.cfg.Bucket),
+		Key:    aws.String(store.prefix(p)),
+		Range:  aws.String(fmt.Sprintf("bytes=%d-%d", offset, offset+length-1)),
+	}
+	resp, err := store.s3.GetObject(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	buf, err := io.ReadAll(io.LimitReader(resp.Body, length))
+	if err != nil {
+		return nil, err
+	}
+	return buf, nil
 }
 
 // FileSize returns size of the file under the given path.

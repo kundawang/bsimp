@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>{{ .Listing.Album.Title }}</title>
+	{{ if .Listing.Cover }}
+	<link rel="icon" href="/stream/{{ .Listing.Cover.URLPath }}">
+	{{ else }}
+	<link rel="icon" href="/static/{{ .StaticVersion }}/favicon.svg">
+	{{ end }}
+	<link rel="stylesheet" href="/static/{{ .StaticVersion }}/style.css">
+	<script src="/static/{{ .StaticVersion }}/player.js"></script>
+</head>
+
+<body>
+
+{{ template "nav" .Nav }}
+
+<div class="path">
+	<a href="/library/">Music</a> /
+	<a href="/search?q={{ .Listing.Album.Artist }}">Albums</a> /
+	{{ .Listing.Album.Title }}
+</div>
+
+<div class="album-header">
+	{{ if .Listing.Cover }}
+	<div class="cover">
+		<img src="/stream/{{ .Listing.Cover.URLPath }}" alt="Cover">
+	</div>
+	{{ end }}
+	<h1>{{ .Listing.Album.Title }}</h1>
+	<div class="album-artist">{{ .Listing.Album.Artist }}</div>
+	<div class="album-meta">{{ len .Listing.Tracks }} track(s)</div>
+</div>
+
+{{ template "player" . }}
+
+<div class="table">
+	{{ range $index, $track := .Listing.Tracks }}
+		<div class="row track" data-url="/stream/{{ $track.URLPath }}"
+			data-title="{{ $track.Title }}" data-index="{{ $index }}"
+			data-artist="{{ $track.Artist }}" data-album="{{ $track.Album }}">
+			<span class="icon button-track-playpause"></span>
+			<span class="track-number">{{ if $track.TrackNumber }}{{ $track.TrackNumber }}{{ end }}</span>
+			{{ $track.Title }}
+			{{ if not $track.HasTags }}
+				<span class="tag-warning" title="{{ $track.TagError }}">untagged</span>
+			{{ end }}
+		</div>
+	{{ end }}
+</div>
+
+{{ if .ProblemCount }}
+<p class="notice">{{ .ProblemCount }} track(s) in the library have unreadable or missing tags. They use filename fallbacks.</p>
+{{ end }}
+
+</body>
+
+</html>

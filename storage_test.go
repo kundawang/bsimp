@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -255,5 +256,86 @@ func TestS3Storage(t *testing.T) {
 	// Base prefix doesn't exist.
 	s.cfg.BasePrefix = "dir3/"
 	_, _, err = s.List(ctx, "")
+	asrt.Error(err)
+}
+
+func TestS3Storage_WalkPaginates(t *testing.T) {
+	asrt := assert.New(t)
+	ctx := context.Background()
+	cfg, closeS3 := newTestS3Config()
+	defer closeS3()
+	s := NewS3Storage(cfg)
+	_, err := s.s3.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: aws.String("test")})
+	asrt.NoError(err)
+
+	// One page holds at most 1000 keys on S3-compatible stores. Exceed it to
+	// prove the walk follows continuation tokens.
+	const n = 1003
+	for i := 0; i < n; i++ {
+		_, err := s.s3.PutObject(ctx, &s3.PutObjectInput{
+			Body:   strings.NewReader("x"),
+			Bucket: aws.String("test"),
+			Key:    aws.String(fmt.Sprintf("dir/%04d.bin", i)),
+		})
+		asrt.NoError(err)
+	}
+
+	var seen []string
+	err = s.Walk(ctx, "", nil, func(m *ObjectMeta) error {
+		seen = append(seen, m.Path)
+		return nil
+	})
+	asrt.NoError(err)
+	asrt.Len(seen, n)
+	asrt.Equal("dir/0000.bin", seen[0])
+	asrt.Equal("dir/1002.bin", seen[n-1])
+
+	// Early stop must not error.
+	count := 0
+	err = s.Walk(ctx, "", nil, func(m *ObjectMeta) error {
+		count++
+		if count == 5 {
+			return errStopWalk
+		}
+		return nil
+	})
+	asrt.ErrorIs(err, errStopWalk)
+	asrt.Equal(5, count)
+}
+
+func TestS3Storage_ReadRange(t *testing.T) {
+	asrt := assert.New(t)
+	ctx := context.Background()
+	cfg, closeS3 := newTestS3Config()
+	defer closeS3()
+	s := NewS3Storage(cfg)
+	_, err := s.s3.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: aws.String("test")})
+	asrt.NoError(err)
+
+	content := "0123456789abcdefghij"
+	_, err = s.s3.PutObject(ctx, &s3.PutObjectInput{
+		Body:   strings.NewReader(content),
+		Bucket: aws.String("test"),
+		Key:    aws.String("obj.bin"),
+	})
+	asrt.NoError(err)
+
+	b, err := s.ReadRange(ctx, "obj.bin", 5, 4)
+	asrt.NoError(err)
+	asrt.Equal("5678", string(b))
+
+	// Reading past the end returns the available suffix.
+	b, err = s.ReadRange(ctx, "obj.bin", 18, 10)
+	asrt.NoError(err)
+	asrt.Equal("ij", string(b))
+
+	// Invalid arguments are rejected without a request.
+	_, err = s.ReadRange(ctx, "obj.bin", -1, 4)
+	asrt.Error(err)
+	_, err = s.ReadRange(ctx, "obj.bin", 0, 0)
+	asrt.Error(err)
+
+	// Missing object.
+	_, err = s.ReadRange(ctx, "nope.bin", 0, 4)
 	asrt.Error(err)
 }

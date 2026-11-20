@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>{{ defaultString .Result.Query "Albums" }}</title>
+	<link rel="icon" href="/static/{{ .StaticVersion }}/favicon.svg">
+	<link rel="stylesheet" href="/static/{{ .StaticVersion }}/style.css">
+</head>
+
+<body>
+
+{{ template "nav" .Nav }}
+
+<div class="path">
+	<a href="/library/">Music</a> / Albums
+	{{ if .Result.Query }} / "{{ .Result.Query }}"{{ end }}
+</div>
+
+{{ if not .Result.IndexReady }}
+	<p class="notice error">The tag index is not ready yet. Browsing by album will appear after the first scan.</p>
+	{{ if .Result.IndexFailure }}<p class="notice error">{{ .Result.IndexFailure }}</p>{{ end }}
+{{ else }}
+	<p class="notice">
+		{{ .Result.TotalAlbums }} album(s), {{ .Result.TotalTracks }} track(s) matched.
+		{{ if .Result.Truncated }}Showing the first {{ .Result.SearchLimit }} of each.{{ end }}
+	</p>
+{{ end }}
+
+{{ if .Result.Albums }}
+<h2>Albums</h2>
+<div class="table">
+	{{ range $album := .Result.Albums }}
+	<a class="row album" href="/album/{{ $album.ID }}">
+		<span class="icon folder"></span>
+		<span class="album-title">{{ $album.Title }}</span>
+		<span class="album-artist">{{ $album.Artist }}</span>
+		<span class="album-count">{{ len $album.Tracks }}</span>
+	</a>
+	{{ end }}
+</div>
+{{ end }}
+
+{{ if .Result.Tracks }}
+<h2>Tracks</h2>
+<div class="table">
+	{{ range $track := .Result.Tracks }}
+	<a class="row" href="/stream/{{ $track.URLPath }}" target="_blank">
+		<span class="icon file"></span>
+		{{ $track.Title }}
+		<span class="track-album">{{ $track.Album }}</span>
+		{{ if not $track.HasTags }}<span class="tag-warning">untagged</span>{{ end }}
+	</a>
+	{{ end }}
+</div>
+{{ end }}
+
+{{ if and .Result.IndexReady (not .Result.Albums) (not .Result.Tracks) }}
+	<p class="notice">No albums or tracks matched.</p>
+{{ end }}
+
+</body>
+
+</html>

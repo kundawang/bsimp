@@ -13,6 +13,7 @@ I didn't want to go with the existing [open source](https://github.com/awesome-s
 ## Features
 
 - Cover art support
+- Tag indexing: reads artist, album, title and track number, groups tracks into albums and adds search regardless of file names
 - Responsive design
 - Stateless - no database required
 
@@ -60,6 +61,56 @@ secret = "minioadmin"
 bsimp -config=/etc/bsimp/config.toml -http=":8080"
 ```
 
+## Tag indexing
+
+Bsimp reads ID3v1/ID3v2, MP4, FLAC, Ogg Vorbis and Opus tags directly from the
+object store. Only the leading metadata bytes of each object are fetched, using
+HTTP range requests, so the audio itself is never downloaded.
+
+- **Albums** (`/search` and `/album/<id>`) group tracks by album title and album
+  artist, so two different "Greatest Hits" albums do not merge and the same
+  album stays together even when its files are scattered across directories or
+  named unpredictably.
+- **Fallbacks**: a missing, damaged, oversized or unreadable tag never hides a
+  track. The title falls back to the file name, the album to the containing
+  directory, and the track number to a leading number in the file name
+  (`01. Song`, `3 - Song`, `1-02 Song`). Search and the directory listing mark
+  such tracks as `untagged`.
+- **Search** is case- and Unicode-normalization-insensitive. All whitespace
+  separated terms must match. Results are bounded (`limit`, default 100, max
+  500) and report total match counts plus whether they were capped.
+- **Incremental**: after the first scan, an object is re-read only when its
+  ETag or size changes. Transient read errors are not cached and are retried on
+  the next scan.
+
+The index lives in memory only - nothing is written to the bucket. Index status
+and manual refresh are available at `/index/`.
+
+Index behavior can be tuned:
+
+```toml
+[index]
+# Audio objects indexed per snapshot. The scan stops at the cap and reports
+# a truncated index. Set to -1 for no cap.
+max_objects = 50000
+# Concurrent tag reads.
+concurrency = 8
+# Per-object and per-scan deadlines.
+tag_timeout = "10s"
+scan_timeout = "15m"
+# How long a snapshot is reused before a background rescan.
+refresh_interval = "5m"
+# Bytes and range requests allowed per object when reading tags.
+max_tag_bytes = 1048576
+max_tag_requests = 64
+```
+
+Because tag parsing runs over untrusted object bytes, every read is bounded by
+`max_tag_bytes` and `max_tag_requests`, each read has its own deadline, and a
+panicking parser is reported as a corrupt tag instead of crashing the scan. If a
+scan fails outright (for example the bucket is unreachable), the previous
+snapshot keeps being served and the failure is shown on `/index/`.
+
 ## Security
 
 Bsimp doesn't have built-in authentication or rate-limiting. The server should never be exposed to the Internet directly to avoid unexpected S3 bills.
@@ -81,7 +132,8 @@ No, but the web interface works well on mobile phones. The Media Session API let
 
 ### Does it support playlists?
 
-No, Bsimp follows the S3 bucket directory structure.
+No, Bsimp follows the S3 bucket directory structure for browsing. The tag index
+adds album grouping and search on top, but does not define playlists.
 
 ### Does it support transcoding?
 

@@ -3,7 +3,7 @@
 
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>{{ .CurrentDirectory.Name }}</title>
+	<title>{{ defaultString .CurrentDirectory.Name "Music" }}</title>
 	{{ if .Cover }}
 	<link rel="icon" href="/stream/{{ .Cover.URLPath }}">
 	{{ else }}
@@ -15,6 +15,8 @@
 </head>
 
 <body>
+
+{{ template "nav" .Nav }}
 
 <div class="path">
 	{{ range $dir := .CurrentDirectory.Parents }}
@@ -45,10 +47,19 @@
 {{ if or .AudioTracks (or .Files .Directories) }}
 <div class="table">
 	{{ range $index, $track := .AudioTracks }}
+		{{ $meta := $.Track $track }}
 		<div class="row track" data-url="/stream/{{ $track.URLPath }}"
-			data-title="{{ $track.FriendlyName}}" data-index="{{ $index }}">
+			data-title="{{ $.DisplayName $track }}" data-index="{{ $index }}"
+			data-artist="{{ if $meta }}{{ $meta.Artist }}{{ end }}"
+			data-album="{{ if $meta }}{{ $meta.Album }}{{ end }}">
 			<span class="icon button-track-playpause"></span>
-			{{ $track.FriendlyName}}
+			{{ if $meta }}
+				<span class="track-number">{{ if $meta.TrackNumber }}{{ $meta.TrackNumber }}{{ end }}</span>
+			{{ end }}
+			{{ $.DisplayName $track }}
+			{{ if and $meta (not $meta.HasTags) }}
+				<span class="tag-warning" title="{{ $meta.TagError }}">untagged</span>
+			{{ end }}
 		</div>
 	{{ end }}
 	{{ range $dir := .Directories }}

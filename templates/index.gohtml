@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Index</title>
+	<link rel="icon" href="/static/{{ .StaticVersion }}/favicon.svg">
+	<link rel="stylesheet" href="/static/{{ .StaticVersion }}/style.css">
+</head>
+
+<body>
+
+<div class="nav">
+	<a href="/library/">Music</a>
+	<a href="/search">Albums</a>
+	<a href="/index/">Index</a>
+</div>
+
+<div class="path"><a href="/library/">Music</a> / Index</div>
+
+{{ if not .Ready }}
+	<p class="notice">No snapshot yet. The first scan runs in the background, or start one now.</p>
+{{ else }}
+	<p class="notice">
+		Indexed {{ .Stats.Scanned }} track(s) in {{ duration .Stats.Duration }}.
+		{{ if .Stats.Truncated }}<strong>Truncated:</strong> {{ .Stats.TruncatedReason }}.{{ end }}
+	</p>
+{{ end }}
+
+{{ if .Failure }}<p class="notice error">Last scan failed: {{ .Failure }}. The previous snapshot is still served.</p>{{ end }}
+
+{{ if .Ready }}
+<div class="table">
+	<div class="row"><span>Read from tags</span><span class="stat">{{ .Stats.Tagged }}</span></div>
+	<div class="row"><span>Reused (unchanged)</span><span class="stat">{{ .Stats.Unchanged }}</span></div>
+	<div class="row"><span>Read this scan</span><span class="stat">{{ .Stats.TagReads }}</span></div>
+	<div class="row"><span>Removed</span><span class="stat">{{ .Stats.Removed }}</span></div>
+	<div class="row"><span>Missing tags (filename fallback)</span><span class="stat">{{ .Stats.MissingTags }}</span></div>
+	<div class="row"><span>Corrupt tags (filename fallback)</span><span class="stat">{{ .Stats.CorruptTags }}</span></div>
+	<div class="row"><span>Tags over budget (filename fallback)</span><span class="stat">{{ .Stats.TooLargeTags }}</span></div>
+	<div class="row"><span>Read timeouts (filename fallback)</span><span class="stat">{{ .Stats.Timeouts }}</span></div>
+	<div class="row"><span>Read errors (filename fallback)</span><span class="stat">{{ .Stats.ReadErrors }}</span></div>
+</div>
+{{ end }}
+
+<form method="post" action="/index/">
+	<button type="submit">Refresh index now</button>
+</form>
+
+</body>
+
+</html>

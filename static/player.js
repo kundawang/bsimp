@@ -48,8 +48,8 @@ function initPlayer() {
     if ('mediaSession' in navigator) {
       let meta = {
         title: trackEl.dataset.title,
-        artist: "",
-        album: ""
+        artist: trackEl.dataset.artist || "",
+        album: trackEl.dataset.album || ""
       };
       if (coverImgEl) {
         meta.artwork = [{ src: coverImgEl.src }]

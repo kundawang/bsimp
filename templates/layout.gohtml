@@ -1,0 +1,12 @@
+{{/* Shared navigation: the search box keeps its query between pages. */}}
+{{ define "nav" }}
+<div class="nav">
+	<a href="/library/">Music</a>
+	<a href="/search">Albums</a>
+	<a href="/index/">Index</a>
+	<form class="search" action="/search" method="get" role="search">
+		<input type="search" name="q" value="{{ .Query }}" placeholder="Search artist, album, title" aria-label="Search">
+		<button type="submit">Search</button>
+	</form>
+</div>
+{{ end }}
